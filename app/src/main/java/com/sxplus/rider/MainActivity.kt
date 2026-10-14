@@ -25,7 +25,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         // Land on the dashboard if signed in OR a bike was already paired directly.
-        val pairedMac = runBlocking { settingsStore.settings.first().pairedMac }
+        val pairedMac = runCatching { runBlocking { settingsStore.settings.first().pairedMac } }.getOrNull()
         val startOnHome = tokenStore.isLoggedIn || !pairedMac.isNullOrBlank()
         setContent {
             SxpTheme {

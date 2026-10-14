@@ -11,3 +11,7 @@ captures/
 .cxx/
 *.apk
 *.keystore
+
+# Python
+__pycache__/
+*.pyc

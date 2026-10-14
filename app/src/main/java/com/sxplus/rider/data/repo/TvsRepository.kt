@@ -7,7 +7,9 @@ import com.sxplus.rider.data.remote.VerifyOtpRequest
 import com.sxplus.rider.domain.Outcome
 import com.sxplus.rider.domain.UserProfile
 import com.sxplus.rider.domain.Vehicle
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -22,9 +24,9 @@ class TvsRepository @Inject constructor(
     private val flags: RuntimeFlags,
 ) {
     /** Step 1: request an OTP for a phone number. */
-    suspend fun requestOtp(mobile: String): Outcome<Unit> {
-        if (flags.mockEnabled) { delay(400); return Outcome.Ok(Unit) }
-        return try {
+    suspend fun requestOtp(mobile: String): Outcome<Unit> = withContext(Dispatchers.IO) {
+        if (flags.mockEnabled) { delay(400); return@withContext Outcome.Ok(Unit) }
+        try {
             val res = api.login(LoginRequest(mobileNumber = mobile))
             if (res.isSuccessful) Outcome.Ok(Unit)
             else Outcome.Err("Login failed (${res.code()})")
@@ -34,20 +36,20 @@ class TvsRepository @Inject constructor(
     }
 
     /** Step 2: verify OTP, persist tokens + profile, return the user. */
-    suspend fun verifyOtp(mobile: String, otp: String): Outcome<UserProfile> {
+    suspend fun verifyOtp(mobile: String, otp: String): Outcome<UserProfile> = withContext(Dispatchers.IO) {
         if (flags.mockEnabled) {
             delay(400)
             tokens.accessToken = "mock-access"
             tokens.userId = "MOCK-USER-1"
             tokens.userName = "Test Rider"
             tokens.mobile = mobile
-            return Outcome.Ok(UserProfile("MOCK-USER-1", "Test Rider", mobile))
+            return@withContext Outcome.Ok(UserProfile("MOCK-USER-1", "Test Rider", mobile))
         }
-        return try {
+        try {
             val res = api.verifyOtp(body = VerifyOtpRequest(mobileNumber = mobile, otp = otp))
             val body = res.body()
             if (!res.isSuccessful || body?.accessToken.isNullOrBlank()) {
-                return Outcome.Err(body?.message ?: "Invalid OTP (${res.code()})")
+                return@withContext Outcome.Err(body?.message ?: "Invalid OTP (${res.code()})")
             }
             val user = body!!.data?.firstOrNull()
             tokens.accessToken = body.accessToken
@@ -70,22 +72,22 @@ class TvsRepository @Inject constructor(
     }
 
     /** Step 3: fetch vehicles associated with the account. */
-    suspend fun vehicles(): Outcome<List<Vehicle>> {
+    suspend fun vehicles(): Outcome<List<Vehicle>> = withContext(Dispatchers.IO) {
         if (flags.mockEnabled) {
             delay(300)
-            return Outcome.Ok(
+            return@withContext Outcome.Ok(
                 listOf(
                     Vehicle(
-                        userVehicleId = "UV1", vin = "MD6XXXXXXXXXXXXXX",
+                        userVehicleId = "UV1", vin = "MD626EG56S1P31415",
                         model = "iQube ST", nickName = "My iQube",
                         registrationNumber = "KL00AA0000", bleMac = "48:23:35:69:B2:F6",
                     )
                 )
             )
         }
-        val token = tokens.accessToken ?: return Outcome.Err("Not logged in")
-        val uid = tokens.userId ?: return Outcome.Err("Not logged in")
-        return try {
+        val token = tokens.accessToken ?: return@withContext Outcome.Err("Not logged in")
+        val uid = tokens.userId ?: return@withContext Outcome.Err("Not logged in")
+        try {
             val res = api.getVehicleList(token, uid)
             val data = res.body()?.data.orEmpty()
             Outcome.Ok(

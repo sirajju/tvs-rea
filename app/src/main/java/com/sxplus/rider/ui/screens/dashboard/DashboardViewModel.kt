@@ -67,6 +67,7 @@ class DashboardViewModel @Inject constructor(
     fun load() {
         _ui.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
+            try {
             val user = repo.currentUser()
             val paired = settings.settings.first()
 
@@ -99,6 +100,9 @@ class DashboardViewModel @Inject constructor(
                 )
             }
             selected?.bleMac?.let { mac -> settings.setPairedVehicle(mac, selected.displayName) }
+            } catch (e: Exception) {
+                _ui.update { it.copy(loading = false, error = e.message ?: "Could not load vehicles") }
+            }
         }
     }
 
@@ -137,13 +141,17 @@ class DashboardViewModel @Inject constructor(
 
     fun setAutoConnect(v: Boolean) = viewModelScope.launch {
         settings.setAutoConnect(v)
-        if (v) ProximityService.start(getApplication()) else ProximityService.stop(getApplication())
+        runCatching {
+            if (v) ProximityService.start(getApplication()) else ProximityService.stop(getApplication())
+        }
     }
 
     fun setAutoActionOnApproach(v: Boolean) = viewModelScope.launch { settings.setAutoActionOnApproach(v) }
     fun setApproachCommand(c: KeylessCommand) = viewModelScope.launch { settings.setApproachCommand(c) }
 
-    fun startProximity() = ProximityService.start(getApplication())
+    fun startProximity() {
+        runCatching { ProximityService.start(getApplication()) }
+    }
 
     fun logout() {
         ble.disconnect()

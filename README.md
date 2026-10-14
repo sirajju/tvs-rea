@@ -124,6 +124,21 @@ The scaffolded features map directly onto the original app's backends (p360 Grap
 `GetTvsmLatestDeviceData` / `setTimeFence` / `addSecondaryUser`, REST ride/telemetry,
 crash accelerometer+activity-recognition fusion). They are the next build phase.
 
+## 7b. Test without the real bike — BLE simulator
+
+`tools/ble-simulator/` is a cross-platform peripheral that **pretends to be your
+motorcycle** and implements the full `0x40 → 0xF2 → 0x50` handshake, so you can
+verify the keyless chain end-to-end from your PC:
+
+```bash
+cd tools/ble-simulator
+pip install -r requirements.txt
+python tvs_sim.py --vin MD626EG56S1P31415
+```
+Then in the app: *Connect directly → tap `TVSBT_SIM` → Find Vehicle*. A ✅ in the
+simulator console means the app encrypted the challenge correctly with your AES
+key. See `tools/ble-simulator/README.md`.
+
 ## 8. Security notes
 
 - Secrets are build-time only (`secrets.properties`), never committed.

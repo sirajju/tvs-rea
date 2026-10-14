@@ -49,8 +49,13 @@ class ProximityService : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
-        startForeground(NOTIF_ID, buildNotification("Watching for your vehicle…"))
-        startScan()
+        try {
+            startForeground(NOTIF_ID, buildNotification("Watching for your vehicle…"))
+            startScan()
+        } catch (e: Exception) {
+            // e.g. FGS start restrictions / missing permission — fail quietly instead of crashing the app.
+            stopSelf()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
