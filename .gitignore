@@ -18,3 +18,4 @@ __pycache__/
 
 # User PoC reference (own repo, contains secrets) — never commit
 tools/tvs_reverse_engineer/
+tools/tvs_reverse_engineer
