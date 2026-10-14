@@ -76,21 +76,31 @@ object KeylessProtocol {
     fun randomLength(start: Int): Int = randomNumber(1, lengthMax(start))
 
     /**
-     * Build a 20-byte frame (before XOR).
-     * Layout: [9A F1][pktType][start][len][00][data_slice][padding][FF]
+     * Build a 20-byte frame (before XOR). Byte order verified against the
+     * decompiled smali (BluetoothUtil.byteArrayForUnLock) and the v2 PoC:
+     *
+     *   [0,1] = 9A F1 (header)
+     *   [2]   = nonce   (random 1..14)
+     *   [3]   = length
+     *   [4]   = 0x00
+     *   [5]   = cmdByte (0x40 INITIATE / 0x50 RESPONSE)   <-- NOT at [2]
+     *   [6..] = seed[nonce : nonce+length]
+     *   pad zeros, [19] = 0xFF
      */
-    fun buildRawFrame(pktType: Int, data: ByteArray, start: Int, length: Int): ByteArray {
-        val safeStart = start.coerceIn(0, data.size)
-        val end = (safeStart + length).coerceAtMost(data.size)
-        val slice = data.copyOfRange(safeStart, end)
-        val inner = ByteArray(17)
-        inner[0] = pktType.toByte()
-        inner[1] = start.toByte()
-        inner[2] = length.toByte()
-        inner[3] = 0x00
-        slice.copyInto(inner, destinationOffset = 4, endIndex = min(slice.size, 13))
-        val frame = HEADER + inner + byteArrayOf(POSTFIX)
-        check(frame.size == 20) { "Frame length error: ${frame.size}" }
+    fun buildRawFrame(cmdByte: Int, data: ByteArray, nonce: Int, length: Int): ByteArray {
+        val n = nonce.coerceIn(1, 14)
+        val len = length.coerceIn(1, lengthMax(n))
+        val end = (n + len).coerceAtMost(data.size)
+        val slice = if (n < data.size) data.copyOfRange(n, end) else ByteArray(0)
+        val frame = ByteArray(20)
+        frame[0] = HEADER[0]
+        frame[1] = HEADER[1]
+        frame[2] = n.toByte()
+        frame[3] = len.toByte()
+        frame[4] = 0x00
+        frame[5] = cmdByte.toByte()
+        slice.copyInto(frame, destinationOffset = 6, endIndex = min(slice.size, 13))
+        frame[19] = POSTFIX
         return frame
     }
 

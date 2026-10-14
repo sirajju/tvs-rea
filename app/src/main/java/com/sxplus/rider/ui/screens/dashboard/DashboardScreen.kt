@@ -68,6 +68,19 @@ fun DashboardScreen(
     LaunchedEffect(ui.autoConnect, ui.selected?.bleMac) {
         if (ui.autoConnect && ui.selected?.bleMac != null) vm.startProximity()
     }
+    // Already paired -> reconnect automatically when the bike is available.
+    LaunchedEffect(ui.selected?.bleMac) {
+        val mac = ui.selected?.bleMac
+        if (mac != null && bleState != BleState.READY) vm.connect()
+    }
+    // Not paired yet -> show the scan list directly (one-shot, no loop).
+    var autoScanned by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(ui.loading, ui.vehicles.isEmpty()) {
+        if (!ui.loading && ui.vehicles.isEmpty() && !autoScanned) {
+            autoScanned = true
+            onOpenScan()
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -93,9 +106,23 @@ fun DashboardScreen(
                 model = ui.selected?.model,
                 bleState = bleState,
                 onConnectToggle = {
-                    if (bleState == BleState.READY) vm.disconnect() else vm.connect()
+                    val mac = ui.selected?.bleMac
+                    when {
+                        mac == null -> onOpenScan()                       // not paired -> show list
+                        bleState == BleState.READY -> vm.disconnect()
+                        else -> vm.connect()                              // paired -> reconnect
+                    }
                 },
             )
+
+            if (ui.selected?.bleMac == null) {
+                Spacer(Modifier.height(16.dp))
+                com.sxplus.rider.ui.components.PrimaryButton(
+                    text = "Scan & pair your vehicle",
+                    onClick = onOpenScan,
+                    icon = Icons.Default.BluetoothSearching,
+                )
+            }
             Spacer(Modifier.height(24.dp))
 
             KeylessControls(

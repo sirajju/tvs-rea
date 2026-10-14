@@ -135,29 +135,31 @@ class Simulator:
         print(f"\n[RX raw] {raw.hex()}")
         dec = self.p.xor_frame(raw)
         print(f"[RX dec] {dec.hex()}")
-        if len(dec) < 6:
+        if len(dec) < 7:
             return
-        pkt = dec[2]
-        start = dec[3]
-        length = dec[4]
+        # Correct byte order (verified from smali / v2 PoC):
+        #   [2]=nonce  [3]=length  [4]=0x00  [5]=cmd_byte  [6..]=seed slice
+        nonce = dec[2]
+        length = dec[3]
+        cmd_byte = dec[5]
         slice_ = dec[6:6 + length]
 
-        if pkt == 0x40:
-            cmd = self.p.identify_command(start, slice_)
+        if cmd_byte == 0x40:
+            cmd = self.p.identify_command(nonce, slice_)
             self.pending_cmd = cmd
             self.challenge = pysecrets.token_bytes(16)
-            self.log("0x40", f"INITIATE  cmd={cmd or '??'}  (start={start} len={length} slice={slice_.hex()})")
+            self.log("0x40", f"INITIATE  cmd={cmd or '??'}  (nonce={nonce} len={length} slice={slice_.hex()})")
             self.log("0xF2", f"CHALLENGE {self.challenge.hex()}")
             self._notify(self.p.build_challenge_frame(self.challenge))
 
-        elif pkt == 0x50:
+        elif cmd_byte == 0x50:
             if self.challenge is None:
                 self.log("0x50", "RESPONSE received but no active challenge — ignoring")
                 return
             expected = self.p.aes_ctr(self.challenge)
-            exp_slice = expected[start:start + length]
+            exp_slice = expected[nonce:nonce + length]
             ok = (exp_slice == slice_)
-            self.log("0x50", f"RESPONSE  recv={slice_.hex()}  expect[{start}:{start+length}]={exp_slice.hex()}")
+            self.log("0x50", f"RESPONSE  recv={slice_.hex()}  expect[{nonce}:{nonce+length}]={exp_slice.hex()}")
             if ok:
                 print(f"  ✅ AUTHENTICATED — executing: {self.pending_cmd or 'COMMAND'}  (VIN {self.vin})")
             else:
@@ -166,7 +168,7 @@ class Simulator:
             self.challenge = None
             self.pending_cmd = None
         else:
-            self.log("other", f"pkt=0x{pkt:02x} (bootstrap / non-keyless) — ignored")
+            self.log("other", f"cmd=0x{cmd_byte:02x} (bootstrap / non-keyless) — ignored")
 
     def on_read(self, characteristic, **kwargs):
         return characteristic.value

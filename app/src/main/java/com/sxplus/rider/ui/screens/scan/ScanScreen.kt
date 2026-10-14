@@ -16,11 +16,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.SignalCellularAlt
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.TwoWheeler
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -30,7 +32,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -42,6 +50,9 @@ import com.sxplus.rider.ble.ScannedDevice
 import com.sxplus.rider.ui.theme.Ash
 import com.sxplus.rider.ui.theme.CarbonCard
 import com.sxplus.rider.ui.theme.Success
+import kotlinx.coroutines.delay
+
+private const val SCAN_WINDOW_MS = 20_000L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,12 +63,20 @@ fun ScanScreen(
 ) {
     val devices by vm.devices.collectAsStateWithLifecycle()
     val scanning by vm.scanning.collectAsStateWithLifecycle()
+    var showAll by remember { mutableStateOf(false) }
+    var scanNonce by remember { mutableIntStateOf(0) }
 
-    // Start scanning when the screen appears; stop when it leaves.
-    androidx.compose.runtime.DisposableEffect(Unit) {
+    // Scan in bounded windows so it isn't "unstoppable". Rescan bumps scanNonce.
+    LaunchedEffect(scanNonce) {
         vm.startScan()
-        onDispose { vm.stopScan() }
+        delay(SCAN_WINDOW_MS)
+        vm.stopScan()
     }
+    DisposableEffect(Unit) { onDispose { vm.stopScan() } }
+
+    val vehicles = devices.filter { it.looksLikeVehicle || it.bonded }
+    val shown = if (showAll) devices else vehicles
+    val hiddenCount = devices.size - vehicles.size
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -72,15 +91,13 @@ fun ScanScreen(
                 actions = {
                     if (scanning) {
                         CircularProgressIndicator(
-                            Modifier.size(20.dp).padding(end = 4.dp),
-                            strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary,
+                            Modifier.size(20.dp), strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                         Spacer(Modifier.size(12.dp))
-                    } else {
-                        IconButton(onClick = { vm.startScan() }) {
-                            Icon(Icons.Default.SignalCellularAlt, "Rescan",
-                                tint = MaterialTheme.colorScheme.primary)
-                        }
+                    }
+                    IconButton(onClick = { scanNonce++ }) {
+                        Icon(Icons.Default.Refresh, "Rescan", tint = MaterialTheme.colorScheme.primary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -92,20 +109,39 @@ fun ScanScreen(
     ) { pad ->
         Column(Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp)) {
             Text(
-                if (scanning) "Scanning nearby devices…" else "Tap your vehicle to connect",
+                when {
+                    scanning -> "Scanning for your vehicle…"
+                    shown.isEmpty() -> "Nothing found. Tap rescan, and keep the bike's key on."
+                    else -> "Tap your vehicle to connect"
+                },
                 color = Ash, style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
-            if (devices.isEmpty()) {
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                FilterChip(
+                    selected = showAll,
+                    onClick = { showAll = !showAll },
+                    label = { Text(if (showAll) "Showing all devices" else "Vehicles only") },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                    ),
+                )
+                if (!showAll && hiddenCount > 0) {
+                    Spacer(Modifier.size(10.dp))
+                    Text("$hiddenCount other hidden", color = Ash,
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+
+            if (shown.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        if (scanning) "Looking for devices…" else "No devices found. Tap rescan.",
-                        color = Ash,
-                    )
+                    Text(if (scanning) "Looking…" else "No devices", color = Ash)
                 }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(devices, key = { it.address }) { d ->
+                    items(shown, key = { it.address }) { d ->
                         DeviceRow(d) { vm.pair(d, onPaired) }
                     }
                     item { Spacer(Modifier.height(24.dp)) }
@@ -122,10 +158,7 @@ private fun DeviceRow(d: ScannedDevice, onClick: () -> Unit) {
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
     ) {
-        Row(
-            Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 Icons.Default.TwoWheeler, null,
                 tint = if (d.looksLikeVehicle) MaterialTheme.colorScheme.primary else Ash,

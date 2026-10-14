@@ -47,7 +47,9 @@ class BleScanner @Inject constructor(
     private val _scanning = MutableStateFlow(false)
     val scanning: StateFlow<Boolean> = _scanning.asStateFlow()
 
-    private val vehicleHints = listOf("TVS", "SMART", "XONNECT", "TVSBT", "IQUBE", "NTORQ", "RAIDER", "APACHE", "RONIN")
+    private val vehicleHints = listOf("TVS", "SMART", "XONNECT", "TVSBT", "IQUBE", "NTORQ", "RAIDER", "APACHE", "RONIN", "JUPITER")
+    // Known TVS cluster BLE MAC OUI prefixes (from captured devices).
+    private val vehicleOuis = listOf("48:23:35")
 
     private val callback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) = add(result)
@@ -61,12 +63,13 @@ class BleScanner @Inject constructor(
         val uuids = result.scanRecord?.serviceUuids?.map { it.uuid.toString().uppercase() } ?: emptyList()
         val hintByName = name?.uppercase()?.let { n -> vehicleHints.any { n.contains(it) } } ?: false
         val hintByUuid = uuids.any { it.startsWith("00005352") || it.startsWith("00005354") || it.contains("5456534D") }
+        val hintByOui = vehicleOuis.any { dev.address.uppercase().startsWith(it) }
         found[dev.address] = ScannedDevice(
             address = dev.address,
             name = name,
             rssi = result.rssi,
             bonded = runCatching { dev.bondState == android.bluetooth.BluetoothDevice.BOND_BONDED }.getOrDefault(false),
-            looksLikeVehicle = hintByName || hintByUuid,
+            looksLikeVehicle = hintByName || hintByUuid || hintByOui,
         )
         _devices.update {
             found.values.sortedWith(

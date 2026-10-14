@@ -15,3 +15,6 @@ captures/
 # Python
 __pycache__/
 *.pyc
+
+# User PoC reference (own repo, contains secrets) — never commit
+tools/tvs_reverse_engineer/

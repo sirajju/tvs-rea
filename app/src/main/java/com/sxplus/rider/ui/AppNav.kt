@@ -39,7 +39,13 @@ fun AppNav(startLoggedIn: Boolean) {
                 LoginScreen(
                     vm = vm,
                     onOtpSent = { nav.navigate(Routes.OTP) },
-                    onConnectDirectly = { nav.navigate(Routes.SCAN) },
+                    // Go to the dashboard; it reconnects if already paired, or opens
+                    // the scan list directly if nothing is paired yet.
+                    onConnectDirectly = {
+                        nav.navigate(Routes.HOME) {
+                            popUpTo(Routes.AUTH) { inclusive = true }
+                        }
+                    },
                 )
             }
             composable(Routes.OTP) { entry ->

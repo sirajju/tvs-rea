@@ -53,11 +53,27 @@ class DashboardViewModel @Inject constructor(
         load()
         viewModelScope.launch {
             settings.settings.collect { s ->
-                _ui.update {
-                    it.copy(
+                _ui.update { cur ->
+                    var vehicles = cur.vehicles
+                    var selected = cur.selected
+                    // Direct mode (not signed in): reflect the freshly-paired device
+                    // as the current vehicle so the dashboard updates immediately.
+                    if (cur.user == null && s.pairedMac != null && vehicles.none { it.bleMac == s.pairedMac }) {
+                        val v = Vehicle(
+                            userVehicleId = "local", vin = "",
+                            model = s.pairedName ?: "My Vehicle", nickName = s.pairedName,
+                            registrationNumber = null, bleMac = s.pairedMac,
+                        )
+                        vehicles = listOf(v)
+                        selected = v
+                    }
+                    cur.copy(
                         autoConnect = s.autoConnect,
                         autoActionOnApproach = s.autoActionOnApproach,
                         approachCommand = s.approachCommand,
+                        vehicles = vehicles,
+                        selected = selected,
+                        error = if (vehicles.isNotEmpty()) null else cur.error,
                     )
                 }
             }
