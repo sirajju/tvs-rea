@@ -38,6 +38,7 @@ android {
         buildConfigField("String", "UUID_WRITE", "\"${secret("UUID_WRITE", "00005352-0000-1000-8000-00805f9b34fb")}\"")
         buildConfigField("String", "UUID_NOTIFY", "\"${secret("UUID_NOTIFY", "00005354-0000-1000-8000-00805f9b34fb")}\"")
         buildConfigField("String", "BOOTSTRAP_FRAMES", "\"${secret("BOOTSTRAP_FRAMES")}\"") // comma-separated hex
+        buildConfigField("String", "USER_ID", "\"${secret("USER_ID", "0")}\"")
         // ---- Cloud ----
         buildConfigField("String", "BASE_URL_ICE", "\"${secret("BASE_URL_ICE", "https://tvsconnectapi.tvsmotor.com/api/")}\"")
         buildConfigField("String", "BASE_URL_EV", "\"${secret("BASE_URL_EV", "https://tvsiqubeapi.tvsmotor.com/api/")}\"")

@@ -14,6 +14,7 @@ import com.sxplus.rider.BuildConfig
 import com.sxplus.rider.util.Hex.toHex
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,8 +35,19 @@ import javax.inject.Singleton
 @Singleton
 @SuppressLint("MissingPermission")
 class BleKeylessManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val tokenStore: com.sxplus.rider.data.local.TokenStore,
 ) {
+    /**
+     * Resolve the account user id dynamically:
+     *   1) the logged-in session (verifyOtp -> TokenStore.userId),
+     *   2) the secrets.properties fallback (direct-BLE / dev mode),
+     *   3) 0 if neither is available.
+     */
+    private fun effectiveUserId(): Long =
+        tokenStore.userId?.trim()?.toLongOrNull()
+            ?: BuildConfig.USER_ID.toLongOrNull()
+            ?: 0L
     private val cccdUuid = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     private val writeUuid = UUID.fromString(BuildConfig.UUID_WRITE)
     private val notifyUuid = UUID.fromString(BuildConfig.UUID_NOTIFY)
@@ -172,7 +184,7 @@ class BleKeylessManager @Inject constructor(
     private fun markReady() {
         _state.value = BleState.READY
         log("BLE", "Ready — notifications enabled")
-        sendBootstrap()
+        // Wake choreography is now sent per-command (right before the trigger).
     }
 
     private fun handleNotification(raw: ByteArray) {
@@ -203,21 +215,29 @@ class BleKeylessManager @Inject constructor(
         log("TX", frame.toHex())
     }
 
-    private fun sendBootstrap() {
-        val frames = KeylessProtocol.bootstrapFrames
-        if (frames.isEmpty()) return
-        log("BLE", "Sending ${frames.size} bootstrap frames")
-        frames.forEach { writeRaw(it) }
+    /** Wake/bootstrap choreography the bike needs before it will issue a challenge. */
+    private suspend fun sendWakeSequence() {
+        val uid = effectiveUserId()
+        val frames = KeylessProtocol.wakeSequence(uid)
+        log("BLE", "Wake sequence: ${frames.size} frames (userId=$uid)")
+        frames.forEach {
+            writeRaw(it)          // raw, NOT xor-wrapped
+            delay(50)
+        }
+        delay(250)
     }
 
-    // --- Keyless command (the 2-step handshake) -----------------------------
+    // --- Keyless command (full handshake) -----------------------------------
     /**
-     * Executes one keyless command end-to-end. Suspends until the bike's
-     * challenge arrives (or times out), then sends the AES-CTR response.
+     * Executes one keyless command end-to-end:
+     *   wake/bootstrap -> 0x40 trigger (retried) -> wait 0xF2 challenge ->
+     *   AES-CTR -> 0x50 response. Mirrors the verified v2 PoC sequence.
      */
     suspend fun sendKeylessCommand(
         cmd: KeylessCommand,
-        challengeTimeoutMs: Long = 8_000L
+        challengeTimeoutMs: Long = 10_000L,
+        triggerRetries: Int = 5,
+        triggerIntervalMs: Long = 1_200L,
     ): KeylessResult {
         if (!KeylessProtocol.isConfigured())
             return KeylessResult.NotReady("Keyless secrets not configured (see secrets.properties)")
@@ -225,26 +245,46 @@ class BleKeylessManager @Inject constructor(
             return KeylessResult.NotReady("Vehicle not connected")
 
         return try {
-            val seed = KeylessProtocol.seedFor(cmd)
-            val start = KeylessProtocol.randomStart()
-            val length = KeylessProtocol.randomLength(start)
-            val rawReq = KeylessProtocol.buildRawFrame(KeylessProtocol.PKT_INITIATE_REQUEST, seed, start, length)
+            // 1. Wake the cluster so it will respond to the trigger.
+            sendWakeSequence()
 
-            // arm challenge waiter BEFORE writing the trigger
+            // 2. Build the 0x40 trigger with a stable slice (nonce=1, len=11).
+            val seed = KeylessProtocol.seedFor(cmd)
+            val rawReq = KeylessProtocol.buildRawFrame(
+                KeylessProtocol.PKT_INITIATE_REQUEST, seed,
+                KeylessProtocol.FIXED_NONCE, KeylessProtocol.FIXED_LENGTH,
+            )
+            val triggerWire = KeylessProtocol.xorFrame(rawReq)
+
             val waiter = CompletableDeferred<ByteArray>()
             challengeWaiter = waiter
 
-            log("CMD", "${cmd.label}: 0x40 INITIATE (start=$start len=$length)")
-            writeRaw(KeylessProtocol.xorFrame(rawReq))
+            // 3. Send the trigger, retrying while we wait for the challenge.
+            var remaining = challengeTimeoutMs
+            var challenge: ByteArray? = null
+            for (i in 0 until triggerRetries.coerceAtLeast(1)) {
+                log("CMD", "${cmd.label}: 0x40 trigger ${i + 1}/$triggerRetries")
+                writeRaw(triggerWire)
+                val wait = minOf(triggerIntervalMs, remaining).coerceAtLeast(0)
+                challenge = withTimeoutOrNull(wait) { waiter.await() }
+                if (challenge != null) break
+                remaining -= wait
+                if (remaining <= 0) break
+            }
 
-            val challenge = withTimeoutOrNull(challengeTimeoutMs) { waiter.await() }
-                ?: return KeylessResult.ChallengeTimeout("No challenge within ${challengeTimeoutMs}ms — keep the bike awake and retry")
+            if (challenge == null) {
+                return KeylessResult.ChallengeTimeout(
+                    "No challenge from the vehicle — keep it awake/in range and retry"
+                )
+            }
 
+            // 4. Answer the challenge.
             val encrypted = KeylessProtocol.aesCtrEncrypt(challenge)
-            val aStart = KeylessProtocol.randomStart()
-            val aLen = KeylessProtocol.randomLength(aStart)
-            val rawResp = KeylessProtocol.buildRawFrame(KeylessProtocol.PKT_SEND_RESPONSE, encrypted, aStart, aLen)
-            log("CMD", "0x50 RESPONSE (start=$aStart len=$aLen)")
+            val rawResp = KeylessProtocol.buildRawFrame(
+                KeylessProtocol.PKT_SEND_RESPONSE, encrypted,
+                KeylessProtocol.FIXED_NONCE, KeylessProtocol.FIXED_LENGTH,
+            )
+            log("CMD", "0x50 response")
             writeRaw(KeylessProtocol.xorFrame(rawResp))
 
             KeylessResult.Success

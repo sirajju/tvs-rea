@@ -31,6 +31,10 @@ object KeylessProtocol {
     private const val POSTFIX = 0xFF.toByte()
     private val HEADER = byteArrayOf(0x9A.toByte(), 0xF1.toByte())
 
+    // Stable slice (v2 default) — far more reliable than a random slice.
+    const val FIXED_NONCE = 1
+    const val FIXED_LENGTH = 11
+
     private val aesKey: ByteArray by lazy { Hex.decode(BuildConfig.AES_KEY_HEX) }
     private val xorKey: Int get() = BuildConfig.XOR_KEY_BYTE and 0xFF
 
@@ -42,7 +46,7 @@ object KeylessProtocol {
         KeylessCommand.OPEN_TRUNK -> Hex.decode(BuildConfig.SEED_OPEN_TRUNK)
     }
 
-    /** Parsed bootstrap preamble frames (comma-separated hex in config); empty if none. */
+    /** Parsed legacy bootstrap preamble frames (comma-separated hex in config). */
     val bootstrapFrames: List<ByteArray> by lazy {
         BuildConfig.BOOTSTRAP_FRAMES
             .split(",")
@@ -50,6 +54,44 @@ object KeylessProtocol {
             .filter { it.isNotEmpty() }
             .map { Hex.decode(it) }
     }
+
+    /**
+     * [0x5B,0x22][userId big-endian][zeros][FF] — byteArrayForFistConnection.
+     * This is the wake frame the bike needs before it will answer with a challenge.
+     * [userId] is resolved at runtime (login session first, secret fallback).
+     */
+    fun buildUserIdFrame(userId: Long): ByteArray {
+        val uid = if (userId <= 0) byteArrayOf(0) else {
+            var v = userId
+            val tmp = ArrayDeque<Byte>()
+            while (v > 0) { tmp.addFirst((v and 0xFF).toByte()); v = v shr 8 }
+            tmp.toByteArray()
+        }
+        val frame = ByteArray(20)
+        frame[0] = 0x5B
+        frame[1] = 0x22
+        uid.copyInto(frame, destinationOffset = 2, endIndex = min(uid.size, 17))
+        frame[19] = POSTFIX
+        return frame
+    }
+
+    /** [0x5B,0x4A][signal][battery]...[FF] — returnInitialMobilePacket. */
+    fun buildInitialDataPacket(signal: Int = 0, battery: Int = 0, networkType: Int = 0): ByteArray {
+        val f = ByteArray(20)
+        f[0] = 0x5B
+        f[1] = 0x4A
+        f[2] = signal.toByte()
+        f[3] = battery.toByte()
+        f[7] = 0x01
+        f[8] = 0x02
+        f[17] = networkType.toByte()
+        f[19] = POSTFIX
+        return f
+    }
+
+    /** Full wake/bootstrap sequence to send (raw) right before the 0x40 trigger. */
+    fun wakeSequence(userId: Long): List<ByteArray> =
+        bootstrapFrames + buildUserIdFrame(userId) + buildInitialDataPacket()
 
     // --- XOR layer (symmetric: encrypts and decrypts) -----------------------
     fun xorFrame(raw: ByteArray): ByteArray {
