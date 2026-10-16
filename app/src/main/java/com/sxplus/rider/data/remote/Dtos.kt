@@ -26,24 +26,37 @@ data class VerifyOtpRequest(
     @Json(name = "OTP") val otp: String,
 )
 
+// Real v3 shape: Data is an OBJECT { iceUser: [...], evUser: [...] }.
 @JsonClass(generateAdapter = true)
 data class VerifyOtpResponse(
-    @Json(name = "Status") val status: Int? = null,
+    @Json(name = "StatusCode") val statusCode: Int? = null,
     @Json(name = "Message") val message: String? = null,
-    @Json(name = "AccessToken") val accessToken: String? = null,
-    @Json(name = "RefreshToken") val refreshToken: String? = null,
-    @Json(name = "EVAccessToken") val evAccessToken: String? = null,
-    @Json(name = "EVRefreshToken") val evRefreshToken: String? = null,
-    @Json(name = "Data") val data: List<UserRecord>? = null,
+    @Json(name = "Result") val result: String? = null,
+    @Json(name = "Data") val data: VerifyOtpData? = null,
 )
 
 @JsonClass(generateAdapter = true)
-data class UserRecord(
-    @Json(name = "UserId") val userId: String? = null,
-    @Json(name = "FirstName") val firstName: String? = null,
-    @Json(name = "LastName") val lastName: String? = null,
-    @Json(name = "EmailId") val email: String? = null,
+data class VerifyOtpData(
+    @Json(name = "iceUser") val iceUser: List<IceUser>? = null,
+    @Json(name = "evUser") val evUser: List<EvUser>? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class IceUser(
+    @Json(name = "UserId") val userId: Long? = null,
+    @Json(name = "FullName") val fullName: String? = null,
     @Json(name = "MobileNumber") val mobileNumber: String? = null,
+    @Json(name = "Email") val email: String? = null,
+    @Json(name = "AccessToken") val accessToken: String? = null,
+    @Json(name = "RefreshToken") val refreshToken: String? = null,
+    @Json(name = "Token") val token: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class EvUser(
+    @Json(name = "UserId") val userId: Long? = null,
+    @Json(name = "AccessToken") val accessToken: String? = null,
+    @Json(name = "RefreshToken") val refreshToken: String? = null,
 )
 
 // ---- Vehicle list (GET Vehicle/GetVahicleList?UserId=) ----------------------

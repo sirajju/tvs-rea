@@ -48,22 +48,23 @@ class TvsRepository @Inject constructor(
         try {
             val res = api.verifyOtp(body = VerifyOtpRequest(mobileNumber = mobile, otp = otp))
             val body = res.body()
-            if (!res.isSuccessful || body?.accessToken.isNullOrBlank()) {
+            val ice = body?.data?.iceUser?.firstOrNull()
+            if (!res.isSuccessful || ice?.accessToken.isNullOrBlank()) {
                 return@withContext Outcome.Err(body?.message ?: "Invalid OTP (${res.code()})")
             }
-            val user = body!!.data?.firstOrNull()
-            tokens.accessToken = body.accessToken
-            tokens.refreshToken = body.refreshToken
-            tokens.evAccessToken = body.evAccessToken
-            tokens.userId = user?.userId ?: ""
-            tokens.userName = listOfNotNull(user?.firstName, user?.lastName).joinToString(" ").ifBlank { "Rider" }
-            tokens.mobile = mobile
+            val ev = body?.data?.evUser?.firstOrNull()
+            tokens.accessToken = ice!!.accessToken
+            tokens.refreshToken = ice.refreshToken
+            tokens.evAccessToken = ev?.accessToken
+            tokens.userId = ice.userId?.toString() ?: ""
+            tokens.userName = ice.fullName?.trim()?.ifBlank { "Rider" } ?: "Rider"
+            tokens.mobile = ice.mobileNumber ?: mobile
             Outcome.Ok(
                 UserProfile(
                     userId = tokens.userId ?: "",
                     name = tokens.userName ?: "Rider",
                     mobile = mobile,
-                    email = user?.email,
+                    email = ice.email,
                 )
             )
         } catch (e: Exception) {
