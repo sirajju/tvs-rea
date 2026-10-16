@@ -30,6 +30,8 @@ class SettingsStore @Inject constructor(
         val RSSI_EXIT = intPreferencesKey("rssi_exit")
         val AUTO_LOCK_ON_LEAVE = booleanPreferencesKey("auto_lock_on_leave")
         val AUTO_RECORD_RIDES = booleanPreferencesKey("auto_record_rides")
+        val SELECTED_VEHICLE_KEY = stringPreferencesKey("selected_vehicle_key")
+        val PAIRED_DEVICES = stringPreferencesKey("paired_devices_csv")
     }
 
     data class Settings(
@@ -42,7 +44,11 @@ class SettingsStore @Inject constructor(
         val rssiExit: Int = -85,    // farther than this => "left"
         val autoLockOnLeave: Boolean = false,
         val autoRecordRides: Boolean = true,
+        val selectedVehicleKey: String? = null,
+        val pairedDevices: List<PairedDevice> = emptyList(),
     )
+
+    data class PairedDevice(val mac: String, val name: String)
 
     val settings: Flow<Settings> = context.dataStore.data.map { p ->
         Settings(
@@ -56,8 +62,16 @@ class SettingsStore @Inject constructor(
             rssiExit = p[Keys.RSSI_EXIT] ?: -85,
             autoLockOnLeave = p[Keys.AUTO_LOCK_ON_LEAVE] ?: false,
             autoRecordRides = p[Keys.AUTO_RECORD_RIDES] ?: true,
+            selectedVehicleKey = p[Keys.SELECTED_VEHICLE_KEY],
+            pairedDevices = parsePaired(p[Keys.PAIRED_DEVICES]),
         )
     }
+
+    private fun parsePaired(csv: String?): List<PairedDevice> =
+        csv?.split(";")?.mapNotNull { entry ->
+            val parts = entry.split("|")
+            if (parts.size == 2 && parts[0].isNotBlank()) PairedDevice(parts[0], parts[1]) else null
+        } ?: emptyList()
 
     suspend fun setPairedVehicle(mac: String, name: String?) = context.dataStore.edit {
         it[Keys.PAIRED_MAC] = mac
@@ -71,4 +85,13 @@ class SettingsStore @Inject constructor(
     suspend fun setRssiExit(v: Int) = context.dataStore.edit { it[Keys.RSSI_EXIT] = v }
     suspend fun setAutoLockOnLeave(v: Boolean) = context.dataStore.edit { it[Keys.AUTO_LOCK_ON_LEAVE] = v }
     suspend fun setAutoRecordRides(v: Boolean) = context.dataStore.edit { it[Keys.AUTO_RECORD_RIDES] = v }
+
+    suspend fun setSelectedVehicleKey(key: String) = context.dataStore.edit { it[Keys.SELECTED_VEHICLE_KEY] = key }
+
+    /** Remember a directly-paired BLE device (for multi-vehicle in no-login mode). */
+    suspend fun addPairedDevice(mac: String, name: String?) = context.dataStore.edit { p ->
+        val current = parsePaired(p[Keys.PAIRED_DEVICES]).filterNot { it.mac.equals(mac, true) }
+        val updated = current + PairedDevice(mac, name ?: "Vehicle")
+        p[Keys.PAIRED_DEVICES] = updated.joinToString(";") { "${it.mac}|${it.name}" }
+    }
 }

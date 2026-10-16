@@ -46,6 +46,9 @@ class DashboardViewModel @Inject constructor(
     private val _ui = MutableStateFlow(DashboardUiState())
     val ui: StateFlow<DashboardUiState> = _ui.asStateFlow()
 
+    /** Cloud vehicles cached so the settings-driven rebuild keeps them. */
+    private var cloudVehicles: List<Vehicle> = emptyList()
+
     val bleState: StateFlow<BleState> = ble.state
     val bleLogs = ble.logs
 
@@ -54,19 +57,16 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             settings.settings.collect { s ->
                 _ui.update { cur ->
-                    var vehicles = cur.vehicles
-                    var selected = cur.selected
-                    // Direct mode (not signed in): reflect the freshly-paired device
-                    // as the current vehicle so the dashboard updates immediately.
-                    if (cur.user == null && s.pairedMac != null && vehicles.none { it.bleMac == s.pairedMac }) {
-                        val v = Vehicle(
-                            userVehicleId = "local", vin = "",
-                            model = s.pairedName ?: "My Vehicle", nickName = s.pairedName,
-                            registrationNumber = null, bleMac = s.pairedMac,
-                        )
-                        vehicles = listOf(v)
-                        selected = v
+                    // Rebuild the vehicle list from cloud (cached) + all directly-paired
+                    // devices, and honour the persisted selection.
+                    val local = s.pairedDevices.map { d ->
+                        Vehicle("", "", d.name, d.name, null, d.mac)
                     }
+                    val merged = (cloudVehicles + local).distinctBy { it.bleMac ?: it.key }
+                    val vehicles = merged.ifEmpty { cur.vehicles }
+                    val selected = vehicles.firstOrNull { it.key == s.selectedVehicleKey }
+                        ?: cur.selected?.let { sel -> vehicles.firstOrNull { it.key == sel.key } }
+                        ?: vehicles.firstOrNull()
                     cur.copy(
                         autoConnect = s.autoConnect,
                         autoActionOnApproach = s.autoActionOnApproach,
@@ -84,47 +84,51 @@ class DashboardViewModel @Inject constructor(
         _ui.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
             try {
-            val user = repo.currentUser()
-            val paired = settings.settings.first()
+                val user = repo.currentUser()
+                val s = settings.settings.first()
 
-            // Cloud vehicles (if signed in); empty otherwise.
-            val cloud = when (val r = repo.vehicles()) {
-                is Outcome.Ok -> r.value
-                is Outcome.Err -> emptyList()
-            }
-            // Locally-paired vehicle from the BLE scanner (direct mode, no sign-in).
-            val local = paired.pairedMac?.let { mac ->
-                Vehicle(
-                    userVehicleId = "local",
-                    vin = "",
-                    model = paired.pairedName ?: "My Vehicle",
-                    nickName = paired.pairedName,
-                    registrationNumber = null,
-                    bleMac = mac,
-                )
-            }
+                // Cloud vehicles (if signed in) — cached for the reactive rebuild.
+                cloudVehicles = when (val r = repo.vehicles()) {
+                    is Outcome.Ok -> r.value
+                    is Outcome.Err -> emptyList()
+                }
+                val local = s.pairedDevices.map { d -> Vehicle("", "", d.name, d.name, null, d.mac) }
+                val vehicles = (cloudVehicles + local).distinctBy { it.bleMac ?: it.key }
 
-            val vehicles = if (cloud.isNotEmpty()) cloud else listOfNotNull(local)
-            val selected = vehicles.firstOrNull { it.bleMac == paired.pairedMac } ?: vehicles.firstOrNull()
-            _ui.update {
-                it.copy(
-                    loading = false,
-                    user = user,
-                    vehicles = vehicles,
-                    selected = selected,
-                    error = if (vehicles.isEmpty()) "No vehicle paired yet — tap Pair to scan." else null,
-                )
-            }
-            selected?.bleMac?.let { mac -> settings.setPairedVehicle(mac, selected.displayName) }
+                val selected = vehicles.firstOrNull { it.key == s.selectedVehicleKey }
+                    ?: vehicles.firstOrNull { it.bleMac == s.pairedMac }
+                    ?: vehicles.firstOrNull()
+
+                _ui.update {
+                    it.copy(
+                        loading = false, user = user, vehicles = vehicles, selected = selected,
+                        error = if (vehicles.isEmpty()) "No vehicle paired yet — tap Pair to scan." else null,
+                    )
+                }
+                selected?.let { applyVehicleContext(it) }
             } catch (e: Exception) {
                 _ui.update { it.copy(loading = false, error = e.message ?: "Could not load vehicles") }
             }
         }
     }
 
+    /** Switch the active vehicle: persist, retarget cloud context, reconnect BLE. */
     fun selectVehicle(v: Vehicle) {
+        val prevMac = _ui.value.selected?.bleMac
         _ui.update { it.copy(selected = v) }
-        viewModelScope.launch { v.bleMac?.let { settings.setPairedVehicle(it, v.displayName) } }
+        viewModelScope.launch {
+            applyVehicleContext(v)
+            if (!v.bleMac.isNullOrBlank() && v.bleMac != prevMac) {
+                ble.disconnect()
+                ble.connect(v.bleMac)
+            }
+        }
+    }
+
+    private suspend fun applyVehicleContext(v: Vehicle) {
+        settings.setSelectedVehicleKey(v.key)
+        v.bleMac?.let { settings.setPairedVehicle(it, v.displayName) }
+        repo.setActiveVehicle(v)
     }
 
     fun connect() {

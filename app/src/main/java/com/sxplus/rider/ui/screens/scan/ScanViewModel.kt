@@ -30,6 +30,8 @@ class ScanViewModel @Inject constructor(
         scanner.stop()
         viewModelScope.launch {
             settings.setPairedVehicle(device.address, device.name)
+            settings.addPairedDevice(device.address, device.name)
+            settings.setSelectedVehicleKey("local:${device.address}")
             ble.connect(device.address)
             onPaired()
         }

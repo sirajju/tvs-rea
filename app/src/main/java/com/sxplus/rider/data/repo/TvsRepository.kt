@@ -92,7 +92,14 @@ class TvsRepository @Inject constructor(
                         userVehicleId = "UV1", vin = "MD626EG56S1P31415",
                         model = "iQube ST", nickName = "My iQube",
                         registrationNumber = "KL00AA0000", bleMac = "48:23:35:69:B2:F6",
-                    )
+                        vehicleTypeId = "101",
+                    ),
+                    Vehicle(
+                        userVehicleId = "UV2", vin = "MD999ZZ00Z0Z00000",
+                        model = "Apache RTR 310", nickName = "Weekend bike",
+                        registrationNumber = "KL00BB1111", bleMac = "48:23:35:11:22:33",
+                        vehicleTypeId = "23",
+                    ),
                 )
             )
         }
@@ -110,6 +117,8 @@ class TvsRepository @Inject constructor(
                     registrationNumber = it.registrationNumber,
                     bleMac = it.macId,
                     imageUrl = it.imageUrl,
+                    vehicleTypeId = it.vehicleTypeId,
+                    codpToken = it.codpServiceToken,
                 )
             }
             // Capture the connected-vehicle context for the p360 GraphQL calls.
@@ -124,6 +133,14 @@ class TvsRepository @Inject constructor(
         } catch (e: Exception) {
             Outcome.Err(e.message ?: "Network error")
         }
+    }
+
+    /** Point the cloud context (telemetry/charging/keyless) at the chosen vehicle. */
+    fun setActiveVehicle(v: Vehicle) {
+        if (v.vin.isNotBlank()) tokens.vin = v.vin
+        if (v.userVehicleId.isNotBlank() && v.userVehicleId != "local") tokens.userVehicleId = v.userVehicleId
+        v.vehicleTypeId?.takeIf { it.isNotBlank() }?.let { tokens.vehicleTypeId = it }
+        v.codpToken?.takeIf { it.isNotBlank() }?.let { tokens.codpToken = it }
     }
 
     fun currentUser(): UserProfile? {

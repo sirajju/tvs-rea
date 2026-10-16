@@ -2,6 +2,7 @@ package com.sxplus.rider.ui.screens.dashboard
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -107,6 +108,11 @@ fun DashboardScreen(
             )
             Spacer(Modifier.height(16.dp))
 
+            if (ui.vehicles.size > 1) {
+                VehicleSwitcher(ui.vehicles, ui.selected, vm::selectVehicle)
+                Spacer(Modifier.height(12.dp))
+            }
+
             VehicleCard(
                 name = ui.selected?.displayName ?: "No vehicle",
                 reg = ui.selected?.registrationNumber,
@@ -153,6 +159,26 @@ fun DashboardScreen(
 
             DebugConsole(vm)
             Spacer(Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+private fun VehicleSwitcher(
+    vehicles: List<com.sxplus.rider.domain.Vehicle>,
+    selected: com.sxplus.rider.domain.Vehicle?,
+    onSelect: (com.sxplus.rider.domain.Vehicle) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        vehicles.forEach { v ->
+            androidx.compose.material3.FilterChip(
+                selected = v.key == selected?.key,
+                onClick = { onSelect(v) },
+                label = { Text(v.displayName) },
+            )
         }
     }
 }

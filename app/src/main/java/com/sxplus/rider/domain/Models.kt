@@ -16,8 +16,12 @@ data class Vehicle(
     val registrationNumber: String?,
     val bleMac: String?,
     val imageUrl: String? = null,
+    val vehicleTypeId: String? = null,
+    val codpToken: String? = null,
 ) {
     val displayName: String get() = nickName?.takeIf { it.isNotBlank() } ?: model
+    /** Stable key for selection/persistence (cloud id, else local BLE mac). */
+    val key: String get() = userVehicleId.ifBlank { "local:${bleMac.orEmpty()}" }
 }
 
 /** Generic outcome wrapper for repository calls. */
