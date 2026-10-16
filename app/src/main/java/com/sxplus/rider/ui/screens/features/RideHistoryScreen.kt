@@ -14,12 +14,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -33,46 +34,63 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.launch
+import androidx.lifecycle.viewModelScope
+import com.sxplus.rider.data.local.RideStore
+import com.sxplus.rider.data.local.SettingsStore
 import com.sxplus.rider.data.repo.FeatureRepository
+import com.sxplus.rider.domain.ActiveRide
 import com.sxplus.rider.domain.Ride
+import com.sxplus.rider.ride.RideRecorder
 import com.sxplus.rider.ui.components.FeatureScaffold
+import com.sxplus.rider.ui.components.SettingToggle
 import com.sxplus.rider.ui.components.StatTile
 import com.sxplus.rider.ui.theme.Ash
 import com.sxplus.rider.ui.theme.CarbonCard
+import com.sxplus.rider.ui.theme.Danger
 import com.sxplus.rider.ui.theme.Lime
 import com.sxplus.rider.ui.theme.Success
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
-class RideViewModel @Inject constructor(val repo: FeatureRepository) : ViewModel() {
-    val rides = repo.rides
-    val activeRide = repo.activeRide
+class RideViewModel @Inject constructor(
+    private val repo: FeatureRepository,
+    rideStore: RideStore,
+    recorder: RideRecorder,
+    private val settings: SettingsStore,
+) : ViewModel() {
+    val cloudRides = repo.rides
+    val recordedRides = rideStore.rides
+    val active = recorder.active
+    val autoRecord = settings.settings.map { it.autoRecordRides }
+
     init { viewModelScope.launch { repo.loadRides() } }
-    fun agg() = repo.aggregate()
-    fun start() = repo.startRide()
-    fun stop() = repo.stopRide()
+
+    fun setAutoRecord(v: Boolean) = viewModelScope.launch { settings.setAutoRecordRides(v) }
     fun sync(onDone: (Int) -> Unit) = viewModelScope.launch { onDone(repo.syncRides()) }
 }
 
 @Composable
 fun RideHistoryScreen(onBack: () -> Unit, vm: RideViewModel = hiltViewModel()) {
-    val rides by vm.rides.collectAsStateWithLifecycle()
-    val active by vm.activeRide.collectAsStateWithLifecycle()
-    val agg = vm.agg()
+    val cloud by vm.cloudRides.collectAsStateWithLifecycle(emptyList())
+    val recorded by vm.recordedRides.collectAsStateWithLifecycle(emptyList())
+    val active by vm.active.collectAsStateWithLifecycle()
+    val autoRecord by vm.autoRecord.collectAsStateWithLifecycle(true)
     var lastSync by rememberSaveable { mutableStateOf("") }
+
+    val all = (recorded + cloud).sortedByDescending { it.startedAtMs }
 
     FeatureScaffold(
         title = "Ride History",
         onBack = onBack,
         actions = {
-            androidx.compose.material3.IconButton(onClick = { vm.sync { n -> lastSync = "Synced $n ride(s)" } }) {
+            IconButton(onClick = { vm.sync { n -> lastSync = "Synced $n ride(s)" } }) {
                 Icon(Icons.Default.CloudSync, "Sync", tint = MaterialTheme.colorScheme.primary)
             }
         },
@@ -83,41 +101,50 @@ fun RideHistoryScreen(onBack: () -> Unit, vm: RideViewModel = hiltViewModel()) {
         ) {
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    StatTile("Rides", agg.totalRides.toString(), Modifier.weight(1f))
-                    StatTile("Distance", "${agg.totalDistanceKm.toInt()} km", Modifier.weight(1f), accent = Lime)
-                    StatTile("CO₂ saved", "${agg.totalCo2Kg.toInt()} kg", Modifier.weight(1f), accent = Success)
+                    StatTile("Rides", all.size.toString(), Modifier.weight(1f))
+                    StatTile("Distance", "${all.sumOf { it.distanceKm }.toInt()} km", Modifier.weight(1f), accent = Lime)
+                    StatTile("CO₂", "${all.sumOf { it.co2SavedKg }.toInt()} kg", Modifier.weight(1f), accent = Success)
                 }
             }
+            active?.let { item { ActiveRideCard(it) } }
             item {
                 Surface(color = CarbonCard, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(if (active != null) "Ride in progress…" else "Track a ride",
-                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                            Text(if (active != null) "Recording live" else "Start to record distance & route",
-                                color = Ash, style = MaterialTheme.typography.bodySmall)
-                            if (lastSync.isNotEmpty()) Text(lastSync, color = Success, style = MaterialTheme.typography.bodySmall)
-                        }
-                        androidx.compose.material3.FilledTonalButton(
-                            onClick = { if (active != null) vm.stop() else vm.start() },
-                        ) {
-                            Icon(if (active != null) Icons.Default.Stop else Icons.Default.PlayArrow, null,
-                                Modifier.size(18.dp))
-                            Spacer(Modifier.size(6.dp))
-                            Text(if (active != null) "Stop" else "Start")
-                        }
+                    Column(Modifier.padding(16.dp)) {
+                        SettingToggle(
+                            "Auto-record rides", autoRecord, { vm.setAutoRecord(it) },
+                            subtitle = "Starts on connect + ignition; saves after 5 min disconnected",
+                        )
+                        if (lastSync.isNotEmpty()) Text(lastSync, color = Success,
+                            style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
-            items(rides, key = { it.id }) { RideRow(it) }
+            items(all, key = { it.id }) { RideRow(it) }
             item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }
 
 @Composable
+private fun ActiveRideCard(a: ActiveRide) {
+    Surface(color = CarbonCard, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.FiberManualRecord, null,
+                tint = if (a.paused) Ash else Danger, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.size(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(if (a.paused) "Ride paused (disconnected)" else "Recording ride…",
+                    fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Text("${a.distanceKm} km · ${a.points} points · ${a.lastSpeedKmph} km/h",
+                    color = Ash, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
 private fun RideRow(ride: Ride) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
+    var expanded by rememberSaveable(ride.id) { mutableStateOf(false) }
     val fmt = remember { SimpleDateFormat("EEE, dd MMM · HH:mm", Locale.getDefault()) }
     Surface(
         color = CarbonCard, shape = RoundedCornerShape(16.dp),
@@ -136,12 +163,11 @@ private fun RideRow(ride: Ride) {
             }
             if (expanded) {
                 Spacer(Modifier.height(10.dp))
-                DetailLine("Route", "${ride.startAddress} → ${ride.endAddress}")
                 DetailLine("Avg speed", "${ride.avgSpeedKmph} km/h")
                 DetailLine("Top speed", "${ride.maxSpeedKmph} km/h")
                 DetailLine("Energy", "${ride.energyWh} Wh")
                 DetailLine("CO₂ saved", "${ride.co2SavedKg} kg")
-                DetailLine("Synced", if (ride.synced) "Yes" else "Pending")
+                DetailLine("Synced", if (ride.synced) "Yes" else "Local only")
             }
         }
     }
@@ -154,4 +180,3 @@ private fun DetailLine(k: String, v: String) {
         Text(v, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall)
     }
 }
-

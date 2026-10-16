@@ -29,6 +29,7 @@ class SettingsStore @Inject constructor(
         val RSSI_ENTER = intPreferencesKey("rssi_enter")
         val RSSI_EXIT = intPreferencesKey("rssi_exit")
         val AUTO_LOCK_ON_LEAVE = booleanPreferencesKey("auto_lock_on_leave")
+        val AUTO_RECORD_RIDES = booleanPreferencesKey("auto_record_rides")
     }
 
     data class Settings(
@@ -40,6 +41,7 @@ class SettingsStore @Inject constructor(
         val rssiEnter: Int = -65,   // closer than this => "arrived"
         val rssiExit: Int = -85,    // farther than this => "left"
         val autoLockOnLeave: Boolean = false,
+        val autoRecordRides: Boolean = true,
     )
 
     val settings: Flow<Settings> = context.dataStore.data.map { p ->
@@ -53,6 +55,7 @@ class SettingsStore @Inject constructor(
             rssiEnter = p[Keys.RSSI_ENTER] ?: -65,
             rssiExit = p[Keys.RSSI_EXIT] ?: -85,
             autoLockOnLeave = p[Keys.AUTO_LOCK_ON_LEAVE] ?: false,
+            autoRecordRides = p[Keys.AUTO_RECORD_RIDES] ?: true,
         )
     }
 
@@ -67,4 +70,5 @@ class SettingsStore @Inject constructor(
     suspend fun setRssiEnter(v: Int) = context.dataStore.edit { it[Keys.RSSI_ENTER] = v }
     suspend fun setRssiExit(v: Int) = context.dataStore.edit { it[Keys.RSSI_EXIT] = v }
     suspend fun setAutoLockOnLeave(v: Boolean) = context.dataStore.edit { it[Keys.AUTO_LOCK_ON_LEAVE] = v }
+    suspend fun setAutoRecordRides(v: Boolean) = context.dataStore.edit { it[Keys.AUTO_RECORD_RIDES] = v }
 }

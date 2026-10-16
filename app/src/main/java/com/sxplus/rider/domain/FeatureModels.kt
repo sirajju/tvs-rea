@@ -48,6 +48,24 @@ data class RideAggregate(
     val totalCo2Kg: Double,
 )
 
+/** One recorded track point. */
+data class Waypoint(
+    val ts: Long,
+    val lat: Double,
+    val lng: Double,
+    val speedKmph: Int,
+    val odometerKm: Int,
+)
+
+/** Live state of an in-progress auto-recorded ride. */
+data class ActiveRide(
+    val startedAtMs: Long,
+    val distanceKm: Double,
+    val points: Int,
+    val lastSpeedKmph: Int,
+    val paused: Boolean,   // disconnected, inside the 5-min grace window
+)
+
 // ---- Crash alert (GraphQL addEmergencyContacts + SetVehicleSettings CRASH) --
 data class EmergencyContact(
     val id: String,

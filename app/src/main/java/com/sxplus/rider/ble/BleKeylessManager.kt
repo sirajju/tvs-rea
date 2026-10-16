@@ -165,6 +165,7 @@ class BleKeylessManager @Inject constructor(
         }
 
         override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
+            android.util.Log.d("SXP_BLE", "onWrite ${c.uuid} status=$status")
             if (status != BluetoothGatt.GATT_SUCCESS) log("TX", "write failed status=$status")
         }
 
@@ -188,6 +189,7 @@ class BleKeylessManager @Inject constructor(
     }
 
     private fun handleNotification(raw: ByteArray) {
+        android.util.Log.d("SXP_BLE", "RX ${raw.toHex()}")
         log("RX raw", raw.toHex())
         val dec = KeylessProtocol.xorFrame(raw)
         log("RX dec", dec.toHex())
@@ -199,19 +201,23 @@ class BleKeylessManager @Inject constructor(
     }
 
     // --- Writes -------------------------------------------------------------
-    private fun writeRaw(frame: ByteArray) {
+    private fun writeRaw(
+        frame: ByteArray,
+        writeType: Int = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE,
+    ) {
         val g = gatt ?: return
         val w = writeChar ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            g.writeCharacteristic(w, frame, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
+            g.writeCharacteristic(w, frame, writeType)
         } else {
             @Suppress("DEPRECATION")
-            w.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+            w.writeType = writeType
             @Suppress("DEPRECATION")
             w.value = frame
             @Suppress("DEPRECATION")
             g.writeCharacteristic(w)
         }
+        android.util.Log.d("SXP_BLE", "TX(wt=$writeType) ${frame.toHex()}")
         log("TX", frame.toHex())
     }
 
@@ -305,7 +311,9 @@ class BleKeylessManager @Inject constructor(
         return try {
             val frame = ClusterProtocol.vehicleControlFrame(illumination, rideMode)
             log("CMD", "Cluster control: brightness=$illumination rideMode=$rideMode")
-            writeRaw(frame)
+            android.util.Log.d("SXP_BLE", "CLUSTER brightness=$illumination mode=$rideMode")
+            // Cluster frames use WRITE_TYPE_DEFAULT (with response), matching the OEM app.
+            writeRaw(frame, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
             KeylessResult.Success
         } catch (e: Exception) {
             KeylessResult.Error(e.message ?: "Unknown BLE error")

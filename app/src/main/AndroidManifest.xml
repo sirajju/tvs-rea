@@ -55,5 +55,10 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
+        <service
+            android:name=".ride.RideRecorderService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
     </application>
 </manifest>

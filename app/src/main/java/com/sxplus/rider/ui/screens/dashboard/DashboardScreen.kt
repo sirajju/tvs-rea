@@ -73,6 +73,13 @@ fun DashboardScreen(
         val mac = ui.selected?.bleMac
         if (mac != null && bleState != BleState.READY) vm.connect()
     }
+    // Start the ride recorder when connected (it self-checks the auto-record setting).
+    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    LaunchedEffect(bleState) {
+        if (bleState == BleState.READY) {
+            runCatching { com.sxplus.rider.ride.RideRecorderService.start(appContext) }
+        }
+    }
     // Not paired yet -> show the scan list directly (one-shot, no loop).
     var autoScanned by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(ui.loading, ui.vehicles.isEmpty()) {
