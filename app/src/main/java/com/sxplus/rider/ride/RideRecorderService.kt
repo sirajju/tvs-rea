@@ -37,6 +37,9 @@ class RideRecorderService : LifecycleService() {
     @Inject lateinit var recorder: RideRecorder
     @Inject lateinit var ble: BleKeylessManager
     @Inject lateinit var settings: SettingsStore
+    @Inject lateinit var features: com.sxplus.rider.data.repo.FeatureRepository
+
+    private var lastOverspeedAlertMs = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -52,18 +55,25 @@ class RideRecorderService : LifecycleService() {
     private fun loop() {
         lifecycleScope.launch {
             var disconnectedSinceMs = 0L
+            var wasReady = false
             while (isActive) {
-                val enabled = runCatching { settings.settings.first().autoRecordRides }.getOrDefault(true)
+                val s = runCatching { settings.settings.first() }.getOrNull()
+                val enabled = s?.autoRecordRides ?: true
                 val ready = ble.state.value == BleState.READY
+
+                // Falling edge: just disconnected -> remember where the bike is parked.
+                if (wasReady && !ready) saveParkedLocation(s?.pairedName ?: "Vehicle")
+                wasReady = ready
 
                 if (enabled && ready) {
                     disconnectedSinceMs = 0L
                     runCatching { recorder.tick() }
-                    recorder.active.value?.let {
+                    recorder.active.value?.let { ar ->
                         updateNotification(
-                            if (it.points == 0) "Waiting for ignition…"
-                            else "Recording · ${it.distanceKm} km · ${it.lastSpeedKmph} km/h"
+                            if (ar.points == 0) "Waiting for ignition…"
+                            else "Recording · ${ar.distanceKm} km · ${ar.lastSpeedKmph} km/h"
                         )
+                        maybeOverspeedAlert(ar.lastSpeedKmph, s?.overspeedAlerts ?: true)
                     }
                 } else if (recorder.isRecording()) {
                     // Connected ride is now disconnected — start / check the 5-min grace.
@@ -78,6 +88,35 @@ class RideRecorderService : LifecycleService() {
                     }
                 }
                 delay(TICK_MS)
+            }
+        }
+    }
+
+    /** Overspeed + active time-fence alert (debounced to once/minute). */
+    private fun maybeOverspeedAlert(speed: Int, enabled: Boolean) {
+        if (!enabled) return
+        val limit = features.overspeedLimit.value
+        val timeFenceLimit = com.sxplus.rider.ride.activeTimeFenceLimit(features.fences.value)
+        val effectiveLimit = minOf(limit, timeFenceLimit ?: Int.MAX_VALUE)
+        if (speed > effectiveLimit && System.currentTimeMillis() - lastOverspeedAlertMs > 60_000L) {
+            lastOverspeedAlertMs = System.currentTimeMillis()
+            com.sxplus.rider.util.Notifier.alert(
+                this, 44, "Overspeed", "Riding at $speed km/h (limit $effectiveLimit)"
+            )
+        }
+    }
+
+    @android.annotation.SuppressLint("MissingPermission")
+    private suspend fun saveParkedLocation(vehicle: String) {
+        runCatching {
+            val lm = getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+            val loc = listOf(
+                android.location.LocationManager.GPS_PROVIDER,
+                android.location.LocationManager.NETWORK_PROVIDER,
+            ).mapNotNull { p -> runCatching { lm.getLastKnownLocation(p) }.getOrNull() }
+                .maxByOrNull { it.time }
+            if (loc != null) {
+                settings.setLastParked(loc.latitude, loc.longitude, System.currentTimeMillis(), vehicle)
             }
         }
     }

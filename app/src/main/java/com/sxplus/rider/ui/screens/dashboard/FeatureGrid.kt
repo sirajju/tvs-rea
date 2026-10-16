@@ -17,6 +17,8 @@ import androidx.compose.material.icons.filled.BrightnessHigh
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Sos
@@ -36,6 +38,7 @@ import com.sxplus.rider.ui.theme.CarbonCard
 private data class Feature(val key: String, val label: String, val icon: ImageVector)
 
 private val features = listOf(
+    Feature("find", "Find Vehicle", Icons.Default.MyLocation),
     Feature("telemetry", "Live Telemetry", Icons.Default.Insights),
     Feature("crash", "Crash Alert", Icons.Default.Sos),
     Feature("geofence", "Geo / Time Fence", Icons.Default.Map),
@@ -44,6 +47,7 @@ private val features = listOf(
     Feature("share", "Share Vehicle", Icons.Default.Groups),
     Feature("cluster", "Cluster Control", Icons.Default.BrightnessHigh),
     Feature("settings", "Vehicle Settings", Icons.Default.Tune),
+    Feature("appearance", "Appearance", Icons.Default.Palette),
     Feature("profile", "Profile", Icons.Default.Person),
 )
 

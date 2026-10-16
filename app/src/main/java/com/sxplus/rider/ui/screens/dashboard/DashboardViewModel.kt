@@ -41,6 +41,7 @@ class DashboardViewModel @Inject constructor(
     private val repo: TvsRepository,
     private val ble: BleKeylessManager,
     private val settings: SettingsStore,
+    private val themeController: com.sxplus.rider.ui.theme.ThemeController,
 ) : AndroidViewModel(app) {
 
     private val _ui = MutableStateFlow(DashboardUiState())
@@ -129,6 +130,9 @@ class DashboardViewModel @Inject constructor(
         settings.setSelectedVehicleKey(v.key)
         v.bleMac?.let { settings.setPairedVehicle(it, v.displayName) }
         repo.setActiveVehicle(v)
+        // Apply this vehicle's accent theme.
+        val accents = settings.settings.first().vehicleAccents
+        themeController.setAccent(accents[v.key] ?: 0)
     }
 
     fun connect() {

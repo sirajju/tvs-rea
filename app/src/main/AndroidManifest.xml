@@ -60,5 +60,28 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
+        <!-- Keyless trigger for widget / launcher shortcut / Tasker / adb broadcast -->
+        <receiver
+            android:name=".receiver.KeylessActionReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.sxplus.rider.action.FIND_VEHICLE" />
+                <action android:name="com.sxplus.rider.action.LOCK" />
+                <action android:name="com.sxplus.rider.action.UNLOCK" />
+                <action android:name="com.sxplus.rider.action.OPEN_TRUNK" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".widget.KeylessWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/keyless_widget_info" />
+        </receiver>
+
     </application>
 </manifest>

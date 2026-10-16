@@ -53,9 +53,15 @@ private val LightColors = lightColorScheme(
 @Composable
 fun SxpTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    accent: Color? = null,
     content: @Composable () -> Unit
 ) {
-    val colors = if (darkTheme) DarkColors else LightColors
+    val base = if (darkTheme) DarkColors else LightColors
+    val colors = if (accent != null) base.copy(
+        primary = accent,
+        primaryContainer = accent,
+        onPrimary = if (darkTheme) Carbon else Color.White,
+    ) else base
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {

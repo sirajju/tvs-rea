@@ -99,8 +99,10 @@ fun AppNav(startLoggedIn: Boolean) {
                 "rides" -> com.sxplus.rider.ui.screens.features.RideHistoryScreen(onBack)
                 "charging" -> com.sxplus.rider.ui.screens.features.ChargingScreen(onBack)
                 "share" -> com.sxplus.rider.ui.screens.features.ShareVehicleScreen(onBack)
+                "find" -> com.sxplus.rider.ui.screens.features.FindVehicleScreen(onBack)
                 "cluster" -> com.sxplus.rider.ui.screens.features.ClusterControlScreen(onBack)
                 "settings" -> com.sxplus.rider.ui.screens.features.VehicleSettingsScreen(onBack)
+                "appearance" -> com.sxplus.rider.ui.screens.features.AppearanceScreen(onBack)
                 "profile" -> com.sxplus.rider.ui.screens.features.ProfileScreen(onBack)
                 else -> FeatureScaffoldScreen(featureKey = key, title = featureTitle(key), onBack = onBack)
             }
