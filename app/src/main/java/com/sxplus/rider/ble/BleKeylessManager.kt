@@ -295,6 +295,23 @@ class BleKeylessManager @Inject constructor(
         }
     }
 
+    // --- Cluster push-controls (brightness / ride mode) ---------------------
+    /**
+     * Sends a cluster vehicle-control frame (screen brightness + ride mode).
+     * Separate from keyless: a plain 0x5A/0xF1 frame, XOR-0xEA encrypted.
+     */
+    suspend fun sendVehicleControl(illumination: Int, rideMode: Int): KeylessResult {
+        if (_state.value != BleState.READY) return KeylessResult.NotReady("Vehicle not connected")
+        return try {
+            val frame = ClusterProtocol.vehicleControlFrame(illumination, rideMode)
+            log("CMD", "Cluster control: brightness=$illumination rideMode=$rideMode")
+            writeRaw(frame)
+            KeylessResult.Success
+        } catch (e: Exception) {
+            KeylessResult.Error(e.message ?: "Unknown BLE error")
+        }
+    }
+
     companion object {
         // android.bluetooth.BluetoothDevice.TRANSPORT_LE without importing the whole class name twice
         private const val BluetoothDevice_TRANSPORT_LE = 2

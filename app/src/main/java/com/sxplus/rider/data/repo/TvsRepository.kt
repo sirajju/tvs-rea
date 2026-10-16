@@ -50,9 +50,10 @@ class TvsRepository @Inject constructor(
             val body = res.body()
             val d = body?.data
             val ice = d?.iceUser?.firstOrNull()
-            // Handle both the iceUser-wrapped shape and the flat Data-object shape.
-            val accessToken = ice?.accessToken ?: d?.accessToken
-            val refreshToken = ice?.refreshToken ?: d?.refreshToken
+            // v3 verifyloginotp returns the JWT in "Token" (no AccessToken field).
+            // Fall back across iceUser[0].Token, flat Data.Token, and AccessToken.
+            val accessToken = ice?.accessToken ?: ice?.token ?: d?.accessToken ?: d?.token
+            val refreshToken = ice?.refreshToken ?: d?.refreshToken ?: accessToken
             val uid = ice?.userId ?: d?.userId
             val fullName = ice?.fullName ?: d?.fullName
             val mob = ice?.mobileNumber ?: d?.mobileNumber
