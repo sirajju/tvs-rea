@@ -47,6 +47,33 @@ object ClusterProtocol {
         return encrypt(raw)
     }
 
+    /**
+     * Mobile-data / time-sync frame [0x5B,0x4A …] — sets the cluster clock
+     * (hour/min/sec/AM-PM) + date. Verified from U399 sendMobileData. Without
+     * this on connect the cluster clock resets to 12:00.
+     */
+    fun mobileDataFrame(signalBattery: Int = 0, overspeedLimit: Int = 120): ByteArray {
+        val cal = Calendar.getInstance()
+        val ampm = cal.get(Calendar.AM_PM)           // 0 = AM, 1 = PM
+        val h12 = cal.get(Calendar.HOUR)             // 0..11
+        val hourByte = if (h12 == 0) 12 else h12     // matches the "0" -> "12" rule
+        val min = cal.get(Calendar.MINUTE)
+        val sec = cal.get(Calendar.SECOND)
+        val day = cal.get(Calendar.DAY_OF_MONTH)
+        val month = cal.get(Calendar.MONTH) + 1
+        val year = cal.get(Calendar.YEAR) % 100
+        val raw = byteArrayOf(
+            0x5B, 0x4A,
+            signalBattery.toByte(), overspeedLimit.toByte(), 0, 2,
+            hourByte.toByte(), min.toByte(), sec.toByte(), ampm.toByte(),
+            0, 0,                                     // missed calls, pad
+            day.toByte(), month.toByte(), year.toByte(),
+            0, 0, 0, 0,                               // missed sms, voice, crash, pad
+            POSTFIX,
+        )
+        return encrypt(raw)
+    }
+
     const val MIN_BRIGHTNESS = 1
     const val MAX_BRIGHTNESS = 10
 }

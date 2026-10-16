@@ -1,8 +1,13 @@
 package com.sxplus.rider.ride
 
+import android.annotation.SuppressLint
+import android.content.Context
+import android.location.Location
+import android.location.LocationManager
 import com.sxplus.rider.data.local.RideStore
 import com.sxplus.rider.data.repo.FeatureRepository
 import com.sxplus.rider.domain.ActiveRide
+import dagger.hilt.android.qualifiers.ApplicationContext
 import com.sxplus.rider.domain.Ride
 import com.sxplus.rider.domain.Waypoint
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +34,7 @@ import javax.inject.Singleton
 class RideRecorder @Inject constructor(
     private val repo: FeatureRepository,
     private val rideStore: RideStore,
+    @ApplicationContext private val context: Context,
 ) {
     private val _active = MutableStateFlow<ActiveRide?>(null)
     val active = _active.asStateFlow()
@@ -47,26 +53,52 @@ class RideRecorder @Inject constructor(
 
     fun isRecording() = _active.value != null
 
-    /** One sampling tick while connected. Starts a ride if ignition is on. */
+    /**
+     * One sampling tick while connected. Uses cloud telemetry when available
+     * (IoT/EV: odometer + ignition), else falls back to phone GPS (direct-BLE
+     * mode) so rides still record. Starts a ride when ignition is on, or
+     * immediately in direct mode (ignition can't be read there).
+     */
     suspend fun tick() {
-        val t = repo.telemetry() ?: return
+        val t = repo.telemetry()
+        val lat: Double; val lng: Double; val speed: Int; val odo: Int; val ignitionOn: Boolean
+        if (t != null) {
+            lat = t.latitude; lng = t.longitude; speed = t.speedKmph
+            odo = t.odometerKm; ignitionOn = t.ignitionOn
+        } else {
+            val loc = phoneLocation()
+            lat = loc?.latitude ?: 0.0
+            lng = loc?.longitude ?: 0.0
+            speed = ((loc?.speed ?: 0f) * 3.6f).toInt()   // m/s -> km/h
+            odo = -1                                       // no vehicle odometer in direct mode
+            ignitionOn = true                              // record while connected
+        }
+
         if (!isRecording()) {
-            if (!t.ignitionOn) return
-            begin(t.odometerKm)
+            if (!ignitionOn) return
+            begin(odo)
         }
-        if (startOdo < 0 && t.odometerKm > 0) { startOdo = t.odometerKm; lastOdo = t.odometerKm }
-        if (t.odometerKm > 0) lastOdo = t.odometerKm
-        if (t.latitude != 0.0 && t.longitude != 0.0) {
-            if (!lastLat.isNaN()) gpsMeters += haversineMeters(lastLat, lastLng, t.latitude, t.longitude)
-            lastLat = t.latitude; lastLng = t.longitude
+        if (startOdo < 0 && odo > 0) { startOdo = odo; lastOdo = odo }
+        if (odo > 0) lastOdo = odo
+        if (lat != 0.0 && lng != 0.0) {
+            if (!lastLat.isNaN()) gpsMeters += haversineMeters(lastLat, lastLng, lat, lng)
+            lastLat = lat; lastLng = lng
         }
-        maxSpeed = max(maxSpeed, t.speedKmph)
-        sumSpeed += t.speedKmph
+        maxSpeed = max(maxSpeed, speed)
+        sumSpeed += speed
         count++
-        waypoints.add(Waypoint(System.currentTimeMillis(), t.latitude, t.longitude, t.speedKmph, t.odometerKm))
+        waypoints.add(Waypoint(System.currentTimeMillis(), lat, lng, speed, odo.coerceAtLeast(0)))
         if (paused) paused = false
-        _active.value = ActiveRide(startTime, distanceKm(), waypoints.size, t.speedKmph, paused)
+        _active.value = ActiveRide(startTime, distanceKm(), waypoints.size, speed, paused)
     }
+
+    @SuppressLint("MissingPermission")
+    private fun phoneLocation(): Location? = runCatching {
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+            .mapNotNull { p -> runCatching { lm.getLastKnownLocation(p) }.getOrNull() }
+            .maxByOrNull { it.time }
+    }.getOrNull()
 
     fun pause() {
         if (isRecording()) { paused = true; _active.update { it?.copy(paused = true) } }

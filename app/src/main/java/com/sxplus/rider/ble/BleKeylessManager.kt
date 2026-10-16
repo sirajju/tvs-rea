@@ -185,7 +185,11 @@ class BleKeylessManager @Inject constructor(
     private fun markReady() {
         _state.value = BleState.READY
         log("BLE", "Ready — notifications enabled")
-        // Wake choreography is now sent per-command (right before the trigger).
+        // Sync the cluster clock on connect (otherwise it resets to 12:00).
+        runCatching {
+            writeRaw(ClusterProtocol.mobileDataFrame(), BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+        }
+        // Keyless wake choreography is sent per-command (right before the trigger).
     }
 
     private fun handleNotification(raw: ByteArray) {
