@@ -16,8 +16,10 @@ import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Sos
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -39,6 +41,8 @@ private val features = listOf(
     Feature("rides", "Ride History", Icons.Default.Route),
     Feature("charging", "Charging", Icons.Default.BatteryChargingFull),
     Feature("share", "Share Vehicle", Icons.Default.Groups),
+    Feature("settings", "Vehicle Settings", Icons.Default.Tune),
+    Feature("profile", "Profile", Icons.Default.Person),
 )
 
 @Composable

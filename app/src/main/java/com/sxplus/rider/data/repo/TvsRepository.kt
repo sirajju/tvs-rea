@@ -88,21 +88,28 @@ class TvsRepository @Inject constructor(
         val token = tokens.accessToken ?: return@withContext Outcome.Err("Not logged in")
         val uid = tokens.userId ?: return@withContext Outcome.Err("Not logged in")
         try {
-            val res = api.getVehicleList(token, uid)
+            val res = api.getVehicleList(uid)
             val data = res.body()?.data.orEmpty()
-            Outcome.Ok(
-                data.map {
-                    Vehicle(
-                        userVehicleId = it.userVehicleId ?: "",
-                        vin = it.vin ?: "",
-                        model = it.modelName ?: "Vehicle",
-                        nickName = it.nickName,
-                        registrationNumber = it.registrationNumber,
-                        bleMac = it.bleMacId,
-                        imageUrl = it.imageUrl,
-                    )
-                }
-            )
+            val vehicles = data.map {
+                Vehicle(
+                    userVehicleId = it.userVehicleId ?: "",
+                    vin = it.frameNo ?: "",
+                    model = it.modelName ?: it.vehicleName ?: "Vehicle",
+                    nickName = it.nickName,
+                    registrationNumber = it.registrationNumber,
+                    bleMac = it.macId,
+                    imageUrl = it.imageUrl,
+                )
+            }
+            // Capture the connected-vehicle context for the p360 GraphQL calls.
+            data.firstOrNull()?.let { v ->
+                tokens.vin = v.frameNo
+                tokens.userVehicleId = v.userVehicleId
+                tokens.vehicleTypeId = v.vehicleTypeId
+                tokens.appUserId = tokens.appUserId ?: tokens.userId
+                if (!v.codpServiceToken.isNullOrBlank()) tokens.codpToken = v.codpServiceToken
+            }
+            Outcome.Ok(vehicles)
         } catch (e: Exception) {
             Outcome.Err(e.message ?: "Network error")
         }

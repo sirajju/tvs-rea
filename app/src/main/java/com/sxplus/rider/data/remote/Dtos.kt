@@ -49,17 +49,66 @@ data class UserRecord(
 // ---- Vehicle list (GET Vehicle/GetVahicleList?UserId=) ----------------------
 @JsonClass(generateAdapter = true)
 data class VehicleListResponse(
-    @Json(name = "Status") val status: Int? = null,
+    @Json(name = "StatusCode") val statusCode: Int? = null,
+    @Json(name = "Message") val message: String? = null,
     @Json(name = "Data") val data: List<VehicleRecord>? = null,
 )
 
+/** Mirrors VehicleData — FRAME_NO is the VIN, macId is the BLE MAC. */
 @JsonClass(generateAdapter = true)
 data class VehicleRecord(
     @Json(name = "UserVehicleId") val userVehicleId: String? = null,
-    @Json(name = "VIN") val vin: String? = null,
-    @Json(name = "ModelName") val modelName: String? = null,
-    @Json(name = "VehicleNickName") val nickName: String? = null,
-    @Json(name = "RegistrationNumber") val registrationNumber: String? = null,
-    @Json(name = "BleMacId") val bleMacId: String? = null,
-    @Json(name = "VehicleImage") val imageUrl: String? = null,
+    @Json(name = "FRAME_NO") val frameNo: String? = null,
+    @Json(name = "VehicleModelName") val modelName: String? = null,
+    @Json(name = "VehicleName") val vehicleName: String? = null,
+    @Json(name = "NickName") val nickName: String? = null,
+    @Json(name = "REG_NO") val registrationNumber: String? = null,
+    @Json(name = "macId") val macId: String? = null,
+    @Json(name = "VehicleTypeId") val vehicleTypeId: String? = null,
+    @Json(name = "ImageUrl") val imageUrl: String? = null,
+    @Json(name = "CODPServiceToken") val codpServiceToken: String? = null,
+    @Json(name = "odometerReading") val odometerReading: Double? = null,
+)
+
+// ---- CODP token exchange (GET Vehicle/getnewcodptoken on iqube base) --------
+@JsonClass(generateAdapter = true)
+data class CodpTokenResponse(
+    @Json(name = "StatusCode") val statusCode: Int? = null,
+    @Json(name = "Data") val data: CodpTokenData? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class CodpTokenData(
+    @Json(name = "token") val token: String? = null,
+    @Json(name = "vin") val vin: String? = null,
+    @Json(name = "app_user_id") val appUserId: String? = null,
+)
+
+// ---- Ride list (GET Travel/GetTravelList) -----------------------------------
+@JsonClass(generateAdapter = true)
+data class RideListResponse(
+    @Json(name = "StatusCode") val statusCode: Int? = null,
+    @Json(name = "Data") val data: RideListData? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class RideListData(
+    @Json(name = "CurrentPage") val currentPage: Int? = null,
+    @Json(name = "NextPage") val nextPage: Int? = null,
+    @Json(name = "Results") val results: List<RideItem>? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class RideItem(
+    @Json(name = "travelId") val travelId: String? = null,
+    @Json(name = "travelName") val travelName: String? = null,
+    @Json(name = "travelStartDateTime") val startMs: Long? = null,
+    @Json(name = "travelEndDateTime") val endMs: Long? = null,
+    @Json(name = "totalTravelledDistance") val distanceKm: Double? = null,
+    @Json(name = "rideTime") val rideTimeMs: Long? = null,
+    @Json(name = "totalTime") val totalTimeMs: Long? = null,
+    @Json(name = "averageSpeed") val avgSpeed: Int? = null,
+    @Json(name = "topSpeed") val topSpeed: Double? = null,
+    @Json(name = "isRideSynced") val synced: Boolean? = null,
+    @Json(name = "wayPoints") val wayPoints: String? = null,
 )

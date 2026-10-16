@@ -91,11 +91,18 @@ fun AppNav(startLoggedIn: Boolean) {
             arguments = listOf(navArgument("key") { type = NavType.StringType }),
         ) { entry ->
             val key = entry.arguments?.getString("key") ?: ""
-            FeatureScaffoldScreen(
-                featureKey = key,
-                title = featureTitle(key),
-                onBack = { nav.popBackStack() },
-            )
+            val onBack: () -> Unit = { nav.popBackStack() }
+            when (key) {
+                "telemetry" -> com.sxplus.rider.ui.screens.features.TelemetryScreen(onBack)
+                "crash" -> com.sxplus.rider.ui.screens.features.CrashAlertScreen(onBack)
+                "geofence" -> com.sxplus.rider.ui.screens.features.FenceScreen(onBack)
+                "rides" -> com.sxplus.rider.ui.screens.features.RideHistoryScreen(onBack)
+                "charging" -> com.sxplus.rider.ui.screens.features.ChargingScreen(onBack)
+                "share" -> com.sxplus.rider.ui.screens.features.ShareVehicleScreen(onBack)
+                "settings" -> com.sxplus.rider.ui.screens.features.VehicleSettingsScreen(onBack)
+                "profile" -> com.sxplus.rider.ui.screens.features.ProfileScreen(onBack)
+                else -> FeatureScaffoldScreen(featureKey = key, title = featureTitle(key), onBack = onBack)
+            }
         }
     }
 }

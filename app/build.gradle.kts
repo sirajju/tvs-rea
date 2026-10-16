@@ -96,6 +96,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.moshi.kotlin)
+    ksp("com.squareup.moshi:moshi-kotlin-codegen:1.15.1")
 
     implementation(libs.datastore.preferences)
     implementation(libs.security.crypto)

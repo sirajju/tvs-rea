@@ -50,6 +50,27 @@ class TokenStore @Inject constructor(
         get() = prefs.getString("mobile", null)
         set(v) = prefs.edit().putString("mobile", v).apply()
 
+    // ---- Connected-vehicle context (for p360 GraphQL) ----
+    var codpToken: String?            // Authorization: Bearer <this> for /gapi
+        get() = prefs.getString("codp_token", null)
+        set(v) = prefs.edit().putString("codp_token", v).apply()
+
+    var appUserId: String?            // GraphQL $app_user_id
+        get() = prefs.getString("app_user_id", null)
+        set(v) = prefs.edit().putString("app_user_id", v).apply()
+
+    var vin: String?                  // GraphQL $vin (FRAME_NO)
+        get() = prefs.getString("vin", null)
+        set(v) = prefs.edit().putString("vin", v).apply()
+
+    var userVehicleId: String?
+        get() = prefs.getString("user_vehicle_id", null)
+        set(v) = prefs.edit().putString("user_vehicle_id", v).apply()
+
+    var vehicleTypeId: String?
+        get() = prefs.getString("vehicle_type_id", null)
+        set(v) = prefs.edit().putString("vehicle_type_id", v).apply()
+
     val isLoggedIn: Boolean get() = !accessToken.isNullOrBlank() && !userId.isNullOrBlank()
 
     fun clear() = prefs.edit().clear().apply()
