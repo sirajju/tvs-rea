@@ -35,10 +35,20 @@ data class VerifyOtpResponse(
     @Json(name = "Data") val data: VerifyOtpData? = null,
 )
 
+// Tolerant of BOTH shapes: Data = { iceUser:[…], evUser:[…] } (unified v3)
+// OR Data = a flat user object { UserId, AccessToken, … } (classic).
 @JsonClass(generateAdapter = true)
 data class VerifyOtpData(
     @Json(name = "iceUser") val iceUser: List<IceUser>? = null,
     @Json(name = "evUser") val evUser: List<EvUser>? = null,
+    // flat fallback
+    @Json(name = "UserId") val userId: Long? = null,
+    @Json(name = "FullName") val fullName: String? = null,
+    @Json(name = "MobileNumber") val mobileNumber: String? = null,
+    @Json(name = "Email") val email: String? = null,
+    @Json(name = "AccessToken") val accessToken: String? = null,
+    @Json(name = "RefreshToken") val refreshToken: String? = null,
+    @Json(name = "Token") val token: String? = null,
 )
 
 @JsonClass(generateAdapter = true)

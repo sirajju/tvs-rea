@@ -48,23 +48,32 @@ class TvsRepository @Inject constructor(
         try {
             val res = api.verifyOtp(body = VerifyOtpRequest(mobileNumber = mobile, otp = otp))
             val body = res.body()
-            val ice = body?.data?.iceUser?.firstOrNull()
-            if (!res.isSuccessful || ice?.accessToken.isNullOrBlank()) {
-                return@withContext Outcome.Err(body?.message ?: "Invalid OTP (${res.code()})")
+            val d = body?.data
+            val ice = d?.iceUser?.firstOrNull()
+            // Handle both the iceUser-wrapped shape and the flat Data-object shape.
+            val accessToken = ice?.accessToken ?: d?.accessToken
+            val refreshToken = ice?.refreshToken ?: d?.refreshToken
+            val uid = ice?.userId ?: d?.userId
+            val fullName = ice?.fullName ?: d?.fullName
+            val mob = ice?.mobileNumber ?: d?.mobileNumber
+            val email = ice?.email ?: d?.email
+            if (!res.isSuccessful || accessToken.isNullOrBlank()) {
+                return@withContext Outcome.Err(
+                    body?.message?.takeIf { !res.isSuccessful } ?: "Could not sign in (${res.code()})"
+                )
             }
-            val ev = body?.data?.evUser?.firstOrNull()
-            tokens.accessToken = ice!!.accessToken
-            tokens.refreshToken = ice.refreshToken
-            tokens.evAccessToken = ev?.accessToken
-            tokens.userId = ice.userId?.toString() ?: ""
-            tokens.userName = ice.fullName?.trim()?.ifBlank { "Rider" } ?: "Rider"
-            tokens.mobile = ice.mobileNumber ?: mobile
+            tokens.accessToken = accessToken
+            tokens.refreshToken = refreshToken
+            tokens.evAccessToken = d?.evUser?.firstOrNull()?.accessToken
+            tokens.userId = uid?.toString() ?: ""
+            tokens.userName = fullName?.trim()?.ifBlank { "Rider" } ?: "Rider"
+            tokens.mobile = mob ?: mobile
             Outcome.Ok(
                 UserProfile(
                     userId = tokens.userId ?: "",
                     name = tokens.userName ?: "Rider",
-                    mobile = mobile,
-                    email = ice.email,
+                    mobile = mob ?: mobile,
+                    email = email,
                 )
             )
         } catch (e: Exception) {
